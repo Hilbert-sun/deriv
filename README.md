@@ -54,9 +54,11 @@ without changing the code. Validation rejects the entire run on invalid input;
 it never silently drops tickets. On a validation failure, any artifact from a
 previous successful run remains unchanged and does not represent the failed run.
 
-The supplied task did not include the referenced challenge sample JSON. The
-initial input files therefore contain representative starter data, including
-Unicode and mixed line endings, rather than the original challenge samples.
+`triage_config.json` uses the challenge sample supplied in the screenshot.
+`tickets.json` still contains representative starter data, including Unicode and
+mixed line endings. The screenshot truncates the messages for `T-1001`, `T-1002`,
+and `T-1004`; their full text is needed before replacing the ticket input with the
+exact challenge sample. The input-data correction is therefore incomplete.
 
 ## Normalized artifact
 
