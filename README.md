@@ -2,8 +2,103 @@
 
 A terminal-based Python pipeline for disk-backed support ticket normalization,
 one-request LLM triage, human review, final agent queues, escalation, and
-independent artifact validation. Tasks 1–6 are implemented; no frontend or server
-is required.
+independent artifact validation. Code for Tasks 1–6 is present and tested with a
+mocked provider. Live end-to-end acceptance is still incomplete; see the status
+checkpoint below. No frontend or server is required.
+
+## 项目进度检查点（2026-10-12）
+
+**运行状态：已暂停。** 已检查本项目的流水线及测试进程，没有仍在运行的
+进程。本次收尾只保存文档、提交及合并，不启动流水线、不新增 API 调用。
+暂停是当前维护状态，不是新增的工作流枚举；最近真实运行仍停在
+`TICKETS_NORMALIZED`。恢复运行应等待用户下一条明确指令。
+
+代码交付到 `main`，采用 merge commit 合并 PR [#1](https://github.com/Hilbert-sun/deriv/pull/1)
+和 [#2](https://github.com/Hilbert-sun/deriv/pull/2)，保留源分支及完整提交历史。
+最新代码实现检查点为 `ceccdd9a9e640d976e0586aaae5df66600ec8783`；
+本说明在该提交基础上补充。完整功能代码已保存，但不能据此宣称所有真实
+验收条件都已完成。
+
+### 已完成事项
+
+- [x] **Task 1：磁盘输入与规范化。** 每次读取两个输入 JSON，验证必需字段、
+  ID 唯一性、配置标签及路由；使用项目相对路径；确定性处理换行和边缘空白，
+  保留 Unicode 和输入顺序，计算准确字符数并生成规范化文件。根目录输入及
+  `normalizer.py` 未被后续任务覆盖。配置已按截图样例修正。
+- [x] **Task 2：批量 LLM 集成代码。** 使用官方 SDK 和可配置的密钥、端点、
+  模型；规范化保存后才发送整批工单和完整配置；禁用自动重试；支持预先选择
+  结构化 JSON、JSON mode 或文本 JSON；校验结果并用 Python 计算路由。
+  已真实发起一次请求，但尚未取得可用的 JSON 预测。
+- [x] **Task 3：人工复核代码及模拟验证。** 展示全部分类/优先级，支持多次
+  CSV 覆盖、错误后重试、重复修改、撤销及无修改；保留原始值和最后有效值，
+  每张工单最多一个有效覆盖。EOF 不等于批准，复核完成并保存后才推进状态。
+- [x] **Task 4：最终队列及统计代码。** 应用复核后的分类和优先级，重新计算
+  配置路由，保留已校验回复及输入顺序；生成最终队列、稳定排序的 Markdown
+  分类/优先级/路由统计和原值/新值覆盖清单，各组计数均与工单总数一致。
+- [x] **Task 5：置信度与升级规则。** 在同一批请求中索取置信度，校验有限
+  数值范围，拒绝布尔值；按复核后的允许类别 `other` 或置信度低于 `0.60`
+  生成升级记录，不额外调用模型。
+- [x] **Task 5：单条回退及调用日志。** 保留有效预测；在配置允许时，对缺失、
+  重复或损坏预测使用动态 `other` 路由、配置优先级、置信度 `0.0` 和限长安全
+  回复；无可用回退则明确失败。记录 UTC 调用、实际序列化提示 SHA-256、
+  输入/输出引用、运行 ID、失败状态和恢复错误，不记录 API 密钥。
+- [x] **Task 6：独立校验与隔离测试。** 实现 `validate.py`、测试夹具和完整
+  模拟集成测试；检查当前输入、产物、覆盖、统计、升级、状态顺序和单次调用。
+  使用阶段事件及文件哈希校验执行证据，不只依赖修改时间。
+- [x] **可靠性及可复现性。** 原子写入；每次运行清除本次生成数据以防旧结果
+  误用；保留按运行 ID 区分的调用/恢复历史；测试在临时目录执行，不覆盖根
+  输入，也不产生付费 API 请求。确定性阶段可复现，真实模型文本不承诺一致。
+- [x] **凭据及工作进度保存。** 源码、隔离测试和文档进入 Git；`.env`、
+  `API.env`、虚拟环境及生成数据继续保留在本地并被 Git 忽略。提交前已检查
+  实际 API 密钥不在待提交文件中。新机器需自行配置凭据并重新生成产物。
+
+### 尚未完成事项与真实验收条件
+
+- [ ] **补齐挑战原始工单样例。** 截图中的 `T-1001`、`T-1002`、`T-1004`
+  消息右侧被截断，尚无法逐字还原完整 `tickets.json`。当前根输入仍为先前
+  的三条 starter 工单，不应称作挑战原始四条工单；不能猜测或编造缺失文字。
+- [ ] **解决供应商的 JSON 输出兼容问题。** 最近真实运行预先选择
+  `json_object`，供应商返回了 completion，但正文在第 1 行第 1 列未通过
+  JSON 解析。未发送重试或修复请求；目前没有成功解析的真实模型响应。
+  恢复后需确认提供方、模型和响应格式的兼容设置，并在独立新运行中验证。
+- [ ] **生成真实有效的预测及置信度。** 必须由实际运行输入及真实响应生成
+  `triage_predictions.json`，满足完整覆盖、允许标签、回复限长、路由及置信度
+  校验。当前根目录没有该文件，不能用测试预测或预计算结果替代。
+- [ ] **完成真实人工复核。** 真实预测成功后，需由用户检查分类/优先级并
+  输入有效覆盖，或明确以空行结束复核；目前尚未进入此步骤。
+- [ ] **生成真实下游产物。** 复核后生成 `review_overrides.json`、
+  `final_queue.json`、`queue_summary.md`、`escalations.json`，并验证覆盖、路由、
+  统计及升级规则对本次输入全部生效。当前根目录这些文件均不存在。
+- [ ] **完成真实端到端验收。** 在当前真实输入及真实 API 结果下，内部校验
+  和独立 `python validate.py` 都需通过，最终实际状态达到
+  `RESULTS_FINALISED`。该条件目前仅在模拟集成测试中成立，不代表真实运行成功。
+
+### 最近已执行的验证结果
+
+| 命令/检查 | 已观察到的结果 | 范围与限制 |
+| --- | --- | --- |
+| `.venv/bin/python -m pytest -q` | **60 passed，0 failed** | 官方 SDK + 内存 HTTP 模拟；成功完整执行达到 `RESULTS_FINALISED`，临时目录生成全部产物；无付费调用 |
+| Python 编译检查、`git diff --check` | 通过 | 源码语法和差异格式检查 |
+| `.venv/bin/python main.py` | 退出码 1；实际调用一次；停在 `TICKETS_NORMALIZED` | 规范化 3 张当前工单；真实返回正文不是合法 JSON；无重试、无伪造预测 |
+| `.venv/bin/python validate.py` | 退出码 1，报告缺失预测及下游产物 | 对真实失败运行的正确拒绝，不是测试套件失败，也不能算真实验收通过 |
+| 本次暂停检查 | 无本项目流水线/测试进程在运行 | 未重新运行测试或模型，保留上述真实运行证据 |
+
+最近真实目录保留的产物：`normalized_tickets.json`、`llm_prompt.json`、
+`llm_calls.jsonl`、`pipeline_events.jsonl`、`recovery_log.jsonl`（本次无逐条恢复，
+该日志可为空）。没有 `llm_response.json`，因为正文未成功解析。模拟测试
+生成的完整队列产物位于隔离临时目录，不能作为真实根目录产物提交。
+
+### 保存、回滚与后续恢复
+
+- 合并前主分支检查点：`9408839219657583b2f8c03382a9b6df52f829c5`，
+  对应标签 `checkpoint-before-main-merge-2026-10-12`。
+- Task 1 配置修正检查点：`5ec86145d24400990c7985fb35eb9aa70c4ca2cf`。
+- Task 2 检查点：`e01f1bae863dda0d56dfd5307aad39bef8514a6a`。
+- Tasks 3–6 实现检查点：`ceccdd9a9e640d976e0586aaae5df66600ec8783`。
+- 暂停交付检查点：标签 `checkpoint-paused-2026-10-12`，指向本次合并后的
+  主分支提交。使用 Git 历史或新分支检查旧版本，避免强制覆盖已共享历史。
+- 用户明确恢复后，先补齐原始工单并处理供应商响应格式，再运行真实批次、
+  完成人工复核，最后检查全部产物和独立校验结果；暂停期间不自动重启。
 
 ## Clean-checkout setup
 
@@ -12,8 +107,6 @@ Use Python 3.10 or newer:
 ```sh
 git clone https://github.com/Hilbert-sun/deriv.git
 cd deriv
-# Until the draft PR is merged, select the implementation branch:
-git switch task2/llm-batch-triage
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
