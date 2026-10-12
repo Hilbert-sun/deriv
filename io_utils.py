@@ -93,7 +93,11 @@ def validate_config(config) -> None:
 
 def save_json(path: Path, data) -> None:
     """Replace an artifact atomically, preserving any prior file on failure."""
-    content = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    save_text(path, json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n")
+
+
+def save_text(path: Path, content: str) -> None:
+    """Write an artifact atomically in the same directory."""
     temporary_path = None
     try:
         with tempfile.NamedTemporaryFile(

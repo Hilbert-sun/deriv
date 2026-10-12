@@ -1,0 +1,26 @@
+[
+  {
+    "ticket_id": "TKT-001",
+    "customer_id": "CUSTOMER-101",
+    "subject": "  Charged twice for my subscription  ",
+    "message": "Hello,\r\nI see two charges for this month. Could you help check them?\r\nThank you!  ",
+    "channel": "email",
+    "created_at": "2026-10-12T08:00:00Z"
+  },
+  {
+    "ticket_id": "TKT-002",
+    "customer_id": "CUSTOMER-102",
+    "subject": "Unable to sign in",
+    "message": "  I reset my password, but signing in still shows an error.\rPlease help me access my account.  ",
+    "channel": "web",
+    "created_at": "2026-10-12T08:05:00Z"
+  },
+  {
+    "ticket_id": "TKT-003",
+    "customer_id": "CUSTOMER-103",
+    "subject": "  更新联系邮箱  ",
+    "message": "您好，我想更新账户的联系邮箱。\nMerci — 谢谢！ 😊",
+    "channel": "chat",
+    "created_at": "2026-10-12T08:10:00Z"
+  }
+]

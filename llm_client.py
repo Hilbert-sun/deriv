@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from io_utils import save_json
+from run_log import sha256_file
+
 
 class LLMError(ValueError):
     """Configuration, API, or response-format failure safe to show to users."""
@@ -99,7 +102,10 @@ Python assigns them from configuration after validation.
 Return JSON ONLY, without Markdown, fences, or explanations outside the JSON.
 The top-level object must contain a predictions array. Each prediction must
 contain exactly five string fields: ticket_id, category, priority, reason,
-suggested_reply. For an empty input batch return an empty predictions array.
+suggested_reply, plus confidence as a numeric value from 0.0 to 1.0 reflecting
+your classification certainty. Do not invent high confidence. Request human
+attention with low confidence when the ticket is ambiguous.
+For an empty input batch return an empty predictions array.
 """
 
 
@@ -110,6 +116,7 @@ def prediction_schema(triage_config: dict) -> dict:
         "priority": {"type": "string", "enum": triage_config["allowed_priorities"]},
         "reason": {"type": "string"},
         "suggested_reply": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     }
     return {
         "type": "object",
@@ -150,7 +157,7 @@ def parse_model_response(content: str) -> dict:
         ) from None
 
 
-def request_predictions(normalized_tickets: list[dict], triage_config: dict, settings: LLMSettings) -> dict:
+def request_predictions(normalized_tickets: list[dict], triage_config: dict, settings: LLMSettings, audit=None) -> dict:
     """Send the full batch once. Never retry or issue a format-repair request."""
     try:
         from openai import APIConnectionError, APIError, APIStatusError, APITimeoutError, OpenAI
@@ -177,17 +184,37 @@ def request_predictions(normalized_tickets: list[dict], triage_config: dict, set
     if settings.temperature_zero:
         request["temperature"] = 0
 
+    if audit:
+        audit.prepare(request, settings)
+    attempted = False
+    status = "failed"
+    http_status = None
+    response_hash = None
+    error_type = "invalid_response"
     try:
         with OpenAI(
             api_key=settings.api_key, base_url=settings.base_url,
             max_retries=0, timeout=settings.timeout_seconds,
         ) as client:
+            if audit:
+                audit.started()
+            attempted = True
             completion = client.chat.completions.create(**request)
+        response = _parse_completion(completion)
+        if audit:
+            save_json(audit.run.root / "llm_response.json", response)
+            response_hash = sha256_file(audit.run.root / "llm_response.json")
+        status = "success"
+        return response
     except APITimeoutError:
+        error_type = "timeout"
         raise LLMError("LLM request timed out; no retry was made. Check OPENAI_TIMEOUT_SECONDS.") from None
     except APIConnectionError:
+        error_type = "connection"
         raise LLMError("Cannot connect to the LLM provider; check OPENAI_BASE_URL and network access. No retry was made.") from None
     except APIStatusError as error:
+        error_type = "http_error"
+        http_status = error.status_code
         guidance = {
             401: "Check OPENAI_API_KEY.",
             403: "Check provider permissions for the configured model.",
@@ -195,10 +222,16 @@ def request_predictions(normalized_tickets: list[dict], triage_config: dict, set
         }.get(error.status_code, "Check the configured model, endpoint, and response-format compatibility.")
         raise LLMError(f"LLM provider returned HTTP {error.status_code}. {guidance} No retry was made.") from None
     except APIError:
+        error_type = "sdk_error"
         raise LLMError("The OpenAI SDK could not process the provider response. No retry was made.") from None
     except (json.JSONDecodeError, UnicodeError):
         raise LLMError("LLM provider returned malformed response data. No retry was made.") from None
+    finally:
+        if audit and attempted:
+            audit.finish(status, http_status, response_hash, error_type if status == "failed" else None)
 
+
+def _parse_completion(completion) -> dict:
     choices = getattr(completion, "choices", None)
     if not isinstance(choices, list) or len(choices) != 1:
         raise LLMError("LLM response must contain exactly one completion choice.")

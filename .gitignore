@@ -11,4 +11,14 @@ venv/
 *.key
 normalized_tickets.json
 triage_predictions.json
+review_overrides.json
+final_queue.json
+queue_summary.md
+escalations.json
+llm_calls.jsonl
+recovery_log.jsonl
+pipeline_events.jsonl
+llm_prompt.json
+llm_response.json
+.pytest_cache/
 .DS_Store
