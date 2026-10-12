@@ -3,5 +3,12 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.*
+*.env
+*.env.*
+!.env.example
+*.pem
+*.key
 normalized_tickets.json
+triage_predictions.json
 .DS_Store

@@ -1,7 +1,9 @@
 """JSON input/output and validation for disk-backed triage inputs."""
 
 import json
+import os
 from pathlib import Path
+import tempfile
 
 from normalizer import normalize_text
 
@@ -90,6 +92,17 @@ def validate_config(config) -> None:
 
 
 def save_json(path: Path, data) -> None:
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(data, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
+    """Replace an artifact atomically, preserving any prior file on failure."""
+    content = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="\n", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(content)
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
