@@ -1,0 +1,21 @@
+{
+  "allowed_categories": [
+    "billing",
+    "technical_support",
+    "account_management"
+  ],
+  "allowed_priorities": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "reply_style": {
+    "tone": "friendly and professional",
+    "max_words": 120
+  },
+  "routing_rules": {
+    "billing": "billing_support",
+    "technical_support": "technical_support_queue",
+    "account_management": "account_support"
+  }
+}
