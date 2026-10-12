@@ -1,0 +1,7 @@
+{
+  "allowed_categories": ["membership_request", "delivery_issue"],
+  "allowed_priorities": ["p0", "p1"],
+  "reply_style": {"tone": "brief and courteous", "max_words": 4},
+  "routing_rules": {"membership_request": "team_preferences", "delivery_issue": "team_delivery"},
+  "custom_metadata": {"locale": "multi", "version": 7}
+}

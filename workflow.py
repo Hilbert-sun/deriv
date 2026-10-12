@@ -28,6 +28,12 @@ class Workflow:
     def state(self) -> WorkflowState:
         return self._state
 
+    def require_state(self, expected: WorkflowState) -> None:
+        if self._state != expected:
+            raise WorkflowTransitionError(
+                f"Stage requires {expected.value}; current state is {self._state.value}."
+            )
+
     def transition(self, target: WorkflowState) -> WorkflowState:
         states = tuple(WorkflowState)
         next_index = states.index(self._state) + 1
