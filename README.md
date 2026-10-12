@@ -8,9 +8,10 @@ checkpoint below. No frontend or server is required.
 
 ## Aizex API 兼容性修复与真实验证（2026-10-12）
 
-当前修复分支为 `fix/aizex-api-compatibility`，从 `main` 的
+本次修复来自 `fix/aizex-api-compatibility`，从 `main` 的
 `aa08d07a6ee741310e89ae67a583db91799207ab` 开始。修复 PR
-[#3](https://github.com/Hilbert-sun/deriv/pull/3) **尚未合并**。代码实现提交为
+[#3](https://github.com/Hilbert-sun/deriv/pull/3) 已按用户授权合并到 `main`，
+保留完整提交历史及源分支。代码实现提交为
 `9f65f03e9ac64c38009a4d9e3592050115790545`，后续文档提交记录本次验证结果。
 
 **当前提供方、模型和三条磁盘输入下，真实端到端验证已通过，最终状态为
@@ -70,7 +71,7 @@ OPENAI_TIMEOUT_SECONDS=180
 
 ### 仍未完成或未确认
 
-- [ ] PR #3 的用户审查与合并；本任务要求不自动合并，`main` 尚未包含此修复。
+- [x] 用户在真实端到端验证成功后明确授权合并 PR #3；修复已进入 `main`。
 - [ ] 挑战原始工单样例的逐字补齐：截图中三条消息被截断，当前验证使用已有
   的三条 starter 工单，未伪称为挑战原始四条工单。
 - [ ] **上次失败的确切根因仍未确认。** 旧调用实际使用 `json_object`，但旧
@@ -182,8 +183,6 @@ Use Python 3.10 or newer:
 ```sh
 git clone https://github.com/Hilbert-sun/deriv.git
 cd deriv
-# To review this unmerged API compatibility fix:
-git switch fix/aizex-api-compatibility
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
