@@ -6,44 +6,50 @@ independent artifact validation. Code for Tasks 1–6 is present and tested with
 mocked provider. Live end-to-end acceptance is still incomplete; see the status
 checkpoint below. No frontend or server is required.
 
-## Aizex API 兼容性修复进度（2026-10-12）
+## Aizex API 兼容性修复与真实验证（2026-10-12）
 
-当前修复分支为 `fix/aizex-api-compatibility`，从最新 `main` 的
-`aa08d07a6ee741310e89ae67a583db91799207ab` 开始。此修复单独提交 PR，
-**不会自动合并，也尚未获准执行新的付费请求**。
+当前修复分支为 `fix/aizex-api-compatibility`，从 `main` 的
+`aa08d07a6ee741310e89ae67a583db91799207ab` 开始。修复 PR
+[#3](https://github.com/Hilbert-sun/deriv/pull/3) **尚未合并**。代码实现提交为
+`9f65f03e9ac64c38009a4d9e3592050115790545`，后续文档提交记录本次验证结果。
+
+**当前提供方、模型和三条磁盘输入下，真实端到端验证已通过，最终状态为
+`RESULTS_FINALISED`。** 这是实际 API 与人工复核后的完整运行，不是模拟结果。
+本次流水线已正常退出；没有新增后台任务，也不会自动发起其他请求。
+
+### 本次已完成
 
 - [x] 保留 Chat Completions，新增 Responses API，使用同一套分类说明、
-  动态预测 schema、置信度字段和整批输入。
-- [x] 为两种 API 分别生成正确参数：Chat 使用 `messages` / `response_format`；
-  Responses 使用 `input` / `text.format`，不混用参数。
-- [x] 两种 API 均支持预先选择 `json_schema`、`json_object`、`text`；每个
-  非空批次仍只调用一次、禁用 SDK 重试，不增加模型修复请求。
-- [x] 按所选 API 检查完成状态、拒绝、不完整响应和空输出；Responses
-  提取最终 `output_text` 内容，排除 reasoning 和 commentary，并兼容
-  SDK 的文本结果，避免重复拼接。
+  动态预测 schema、置信度字段和完整批次输入。
+- [x] 两种 API 分别使用正确参数：Chat 的 `messages` / `response_format`，
+  Responses 的 `input` / `text.format`，均支持预先配置的 `json_schema`、
+  `json_object` 和 `text`；每个非空批次只调用一次并禁用 SDK 重试。
+- [x] 按 API 检查完成状态、拒绝、不完整响应及空输出；提取最终
+  `output_text`，排除 reasoning/commentary，避免重复拼接。
 - [x] 接受严格 JSON 或一个完整 JSON 代码围栏；拒绝任意前后说明文字、
-  不完整围栏或多个 JSON 文档；不做子串猜测提取、不使用 `eval()`。
-- [x] 新增不含正文的诊断：API 模式、模型、响应格式、可获得的 HTTP 状态、
-  完成状态、文本是否存在、解析失败类型。诊断写入本地忽略文件及调用日志，
-  不输出凭据、请求头、拒绝正文或工单内容。
-- [x] 调用日志和独立校验识别 API 模式、提示参数与诊断哈希；保留旧 Chat
-  日志兼容，规范化、复核、路由、回复限长、升级及工作流业务规则保持不变。
+  不完整围栏和多个 JSON 文档，不做猜测性子串提取、不使用 `eval()`。
+- [x] 增加不含正文的诊断：API 模式、模型、响应格式、HTTP 状态、完成状态、
+  文本是否存在和解析失败类型。日志及独立校验识别 API 模式、实际提示参数和
+  诊断哈希，保留旧 Chat 日志兼容，不记录密钥、请求头或敏感工单正文。
+- [x] 原有 Tasks 1–6 业务规则保持不变：规范化、配置标签、动态路由、回复
+  限长、置信度、升级、单条回退、人工复核、队列与状态顺序。
 - [x] 整套离线测试：`.venv/bin/python -m pytest -q` → **110 passed，0 failed**。
-  包含原有 60 项和双 API 的完整模拟流水线、三种格式、代码围栏、失败路径、
-  单次请求、人工覆盖和独立产物校验；没有付费调用。
-- [ ] 待用户明确授权后，仅执行**至多一次**新的真实整批请求。
-- [ ] 若请求成功，完成真实人工复核、生成全部下游产物，运行
-  `python validate.py`，实际达到 `RESULTS_FINALISED`。
-- [ ] 真实端到端成功之前，不能宣称 Aizex 兼容问题已解决；失败后不得自动重试。
+  包含原有 60 项和双 API 的完整模拟流程、三种格式、围栏、失败路径、单次
+  请求、人工覆盖及独立产物校验。自动测试没有付费调用。
+- [x] 离线测试后用户明确授权；随后只执行**一次**真实完整批次请求，未重试，
+  未切换格式重发，未增加修复调用。HTTP 状态为 `200`，Responses 状态为
+  `completed`，存在文本输出，JSON 解析失败类型为 `null`。
+- [x] 三条真实预测均通过必需字段、允许标签、路由、置信度及回复字数校验。
+  用户复核后明确选择“保留以上结果，无覆盖”，`review_overrides.json` 为 `[]`。
+- [x] 生成真实 `triage_predictions.json`、`review_overrides.json`、
+  `final_queue.json`、`queue_summary.md`、`escalations.json`：最终工单 **3** 张，
+  有效覆盖 **0** 条，升级记录 **0** 条。
+- [x] 运行 `.venv/bin/python validate.py` → **退出码 0，6 组检查全部通过**；
+  流水线内部校验也通过，真实工作流完整达到 `RESULTS_FINALISED`。
+- [x] 原有失败调用保留在本地历史中。本次运行单独使用新的 run ID，仅有
+  **1** 条实际请求记录；历史总计为此前 1 次失败及本次 1 次成功。
 
-**既有失败的根因尚未确认。** 离线检查发现，上次真实请求实际使用
-`json_object`，并非 `json_schema`；旧日志没有 HTTP 成功状态、响应正文或
-合法 `llm_response.json`。已知事实只有“completion 正文在第 1 行第 1 列
-未通过 JSON 解析”，不足以区分格式不受支持、纯文本、Markdown、空内容或
-响应结构差异。此次修改没有用新的付费请求进行初始诊断，也没有覆盖既有
-真实失败运行的证据。
-
-首选**兼容性候选**配置如下，尚未经过真实提供方验证：
+### 已验证的配置与范围
 
 ```dotenv
 OPENAI_API_MODE=responses
@@ -52,15 +58,28 @@ OPENAI_TEMPERATURE_ZERO=false
 OPENAI_TIMEOUT_SECONDS=180
 ```
 
-本地 `.env` 只更新上述四项；原有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、
-`OPENAI_MODEL` 的值保持不变，凭据文件不提交。若提供方确实支持 Responses
-JSON mode，可在独立运行前选择 `OPENAI_RESPONSE_FORMAT=json_object`；支持
-严格 schema 时可选择 `json_schema`。不得在同一批请求失败后自动尝试其他
-格式或端点。没有设置 `OPENAI_API_MODE` 的旧配置仍默认使用
-`chat_completions`；`.env.example` 则明确提供新的 Responses 候选。
+用户本地的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL` 值保持不变。
+凭据、真实响应和生成产物仅保存在本地并由 Git 忽略，不提交到 GitHub。
+本次验证确认上述配置组合可以完成当前完整流水线，不代表任意模型或提供方
+都支持所有格式。Responses 的 `json_object` 和 `json_schema` 参数映射已通过
+模拟测试；它们尚未在本次真实提供方上分别付费验证。
 
-下面的主分支暂停记录为历史检查点：其中 60 项测试和旧真实运行的状态
-属于上次合并，不代表本修复已执行真实调用。本修复当前停在付费验证授权前。
+没有设置 `OPENAI_API_MODE` 的旧配置仍默认 `chat_completions`。
+`.env.example` 明确提供本次成功的 Responses 配置；任何后续真实运行都应作为
+独立的新批次，不得在失败后自动探测、重试或修复请求。
+
+### 仍未完成或未确认
+
+- [ ] PR #3 的用户审查与合并；本任务要求不自动合并，`main` 尚未包含此修复。
+- [ ] 挑战原始工单样例的逐字补齐：截图中三条消息被截断，当前验证使用已有
+  的三条 starter 工单，未伪称为挑战原始四条工单。
+- [ ] **上次失败的确切根因仍未确认。** 旧调用实际使用 `json_object`，但旧
+  日志没有保存响应正文、HTTP 成功状态或合法解析产物，无法追溯其属于格式
+  不支持、纯文本、Markdown、空内容还是响应结构差异。本次 Responses/text
+  成功不能反推旧 Chat 失败的原因，也不构成 Chat 不受支持的证明。
+
+下面的主分支合并/暂停记录是历史检查点，其中 60 项测试和旧真实失败状态
+属于此前阶段；当前真实运行结果以本节为准。
 
 ## 历史检查点：主分支合并与暂停（2026-10-12）
 
