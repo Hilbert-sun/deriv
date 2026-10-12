@@ -37,6 +37,7 @@ def run_pipeline(project_dir=None, input_fn=None, settings=None, workflow=None, 
         settings = settings or LLMSettings.from_environment(root / ".env")
         output_fn(f"LLM provider: {settings.provider_label}")
         output_fn(f"LLM model: {settings.model}")
+        output_fn(f"LLM API mode: {settings.api_mode}; response format: {settings.response_format}")
         predictions = predict_tickets(normalized, config, settings, audit=CallAudit(run), error_callback=run.recovery_error)
     else:
         predictions = []

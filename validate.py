@@ -133,7 +133,7 @@ def _validate(root: Path, require_finalised: bool) -> list[str]:
         _require(isinstance(hashes, dict), "Stage events require artifact hash mappings.")
         _require(required_evidence.get(event["state"], set()) <= hashes.keys(), "Stage event lacks required input/output evidence.")
         for name, digest in hashes.items():
-            _require(name in required + ("llm_prompt.json", "llm_response.json"), "Stage event references an unexpected artifact.")
+            _require(name in required + ("llm_prompt.json", "llm_response.json", "llm_diagnostics.json"), "Stage event references an unexpected artifact.")
             _require(sha256_file(root / name) == digest, f"{name} changed after its recorded stage; stale or modified artifacts detected.")
     _require(by_state["INPUTS_LOADED"].get("disk_inputs_read") is True, "Disk input-loading evidence is missing.")
     _require(by_state["INPUTS_LOADED"].get("ticket_count") == len(tickets), "Recorded input count differs from disk inputs.")
@@ -148,18 +148,31 @@ def _validate(root: Path, require_finalised: bool) -> list[str]:
         _require(isinstance(call.get("prompt_hash"), str) and re.fullmatch(r"[0-9a-f]{64}", call["prompt_hash"]), "LLM log requires a SHA-256 prompt hash.")
         _require(call.get("input_artifacts") == ["normalized_tickets.json", "triage_config.json"] and call.get("output_artifact") == "triage_predictions.json", "LLM log artifact references are invalid.")
         _require(call.get("status") in ("success", "failed"), "LLM log request status is missing.")
+        _require(call.get("api_mode", "chat_completions") in ("chat_completions", "responses"), "LLM log API mode is invalid.")
     current_calls = [c for c in calls if c["run_id"] == run_id]
     request_events = [e for e in events if e["kind"] == "llm_request"]
     expected_count = 1 if normalized else 0
     _require(len(current_calls) == len(request_events) == expected_count, "Expected exactly one actual LLM request per nonempty batch, and none for an empty batch.")
     if normalized:
         call, event = current_calls[0], request_events[0]
+        mode = call.get("api_mode", "chat_completions")
+        _require(event.get("api_mode", "chat_completions") == mode, "LLM request event and log API modes do not match.")
+        _require(call.get("prompt_parameter", "messages") == ("input" if mode == "responses" else "messages"), "LLM prompt parameter does not match the selected API.")
         _require(call["status"] == "success", "The current run has no successful model response.")
         _require(by_state["TICKETS_NORMALIZED"]["sequence"] < event["sequence"] < by_state["TRIAGE_PREDICTED"]["sequence"], "The model request must occur after saved normalization and before prediction completion.")
         _require(call.get("event_sequence") == event["sequence"] and call["request_id"] == event.get("request_id"), "LLM request log and event do not match.")
         _require(call["prompt_hash"] == event.get("prompt_hash") == sha256_file(root / "llm_prompt.json"), "Actual serialized prompt hash does not match the request log.")
         _require(call.get("response_hash") == sha256_file(root / "llm_response.json"), "Recorded model response hash differs from the actual response artifact.")
         _require(call.get("input_hashes") == {name: sha256_file(root / name) for name in call["input_artifacts"]}, "LLM request inputs are stale.")
+        if "api_mode" in call:
+            diagnostics = call.get("diagnostics")
+            _require(isinstance(diagnostics, dict), "Current API-aware request log requires safe diagnostics.")
+            _require(set(diagnostics) == {"api_mode", "model", "response_format", "http_status", "completion_status", "text_output_present", "json_failure_type"}, "Unexpected diagnostic fields in the request log.")
+            _require(diagnostics.get("api_mode") == mode and diagnostics.get("model") == call["model"] and diagnostics.get("response_format") == call.get("response_format"), "Diagnostic settings differ from the actual request log.")
+            _require(diagnostics.get("http_status") == call.get("http_status") and isinstance(call.get("http_status"), int) and 200 <= call["http_status"] < 300, "Successful request requires matching HTTP success status evidence.")
+            _require(diagnostics.get("completion_status") == ("completed" if mode == "responses" else "stop") and diagnostics.get("text_output_present") is True and diagnostics.get("json_failure_type") is None, "Successful request diagnostics show incomplete or invalid model output.")
+            _require(call.get("diagnostics_hash") == sha256_file(root / "llm_diagnostics.json"), "LLM diagnostic artifact hash differs from the log.")
+            _require(load_json(root / "llm_diagnostics.json") == diagnostics, "LLM diagnostic artifact differs from the actual request evidence.")
         prompt = load_json(root / "llm_prompt.json")
         _require(isinstance(prompt, list) and len(prompt) == 2, "Recorded model prompt is malformed.")
         _require(prompt[0] == {"role": "system", "content": SYSTEM_PROMPT} and prompt[1].get("role") == "user", "Recorded prompt instructions or roles differ from the implementation.")

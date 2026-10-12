@@ -20,5 +20,6 @@ recovery_log.jsonl
 pipeline_events.jsonl
 llm_prompt.json
 llm_response.json
+llm_diagnostics.json
 .pytest_cache/
 .DS_Store

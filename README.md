@@ -6,7 +6,63 @@ independent artifact validation. Code for Tasks 1–6 is present and tested with
 mocked provider. Live end-to-end acceptance is still incomplete; see the status
 checkpoint below. No frontend or server is required.
 
-## 项目进度检查点（2026-10-12）
+## Aizex API 兼容性修复进度（2026-10-12）
+
+当前修复分支为 `fix/aizex-api-compatibility`，从最新 `main` 的
+`aa08d07a6ee741310e89ae67a583db91799207ab` 开始。此修复单独提交 PR，
+**不会自动合并，也尚未获准执行新的付费请求**。
+
+- [x] 保留 Chat Completions，新增 Responses API，使用同一套分类说明、
+  动态预测 schema、置信度字段和整批输入。
+- [x] 为两种 API 分别生成正确参数：Chat 使用 `messages` / `response_format`；
+  Responses 使用 `input` / `text.format`，不混用参数。
+- [x] 两种 API 均支持预先选择 `json_schema`、`json_object`、`text`；每个
+  非空批次仍只调用一次、禁用 SDK 重试，不增加模型修复请求。
+- [x] 按所选 API 检查完成状态、拒绝、不完整响应和空输出；Responses
+  提取最终 `output_text` 内容，排除 reasoning 和 commentary，并兼容
+  SDK 的文本结果，避免重复拼接。
+- [x] 接受严格 JSON 或一个完整 JSON 代码围栏；拒绝任意前后说明文字、
+  不完整围栏或多个 JSON 文档；不做子串猜测提取、不使用 `eval()`。
+- [x] 新增不含正文的诊断：API 模式、模型、响应格式、可获得的 HTTP 状态、
+  完成状态、文本是否存在、解析失败类型。诊断写入本地忽略文件及调用日志，
+  不输出凭据、请求头、拒绝正文或工单内容。
+- [x] 调用日志和独立校验识别 API 模式、提示参数与诊断哈希；保留旧 Chat
+  日志兼容，规范化、复核、路由、回复限长、升级及工作流业务规则保持不变。
+- [x] 整套离线测试：`.venv/bin/python -m pytest -q` → **110 passed，0 failed**。
+  包含原有 60 项和双 API 的完整模拟流水线、三种格式、代码围栏、失败路径、
+  单次请求、人工覆盖和独立产物校验；没有付费调用。
+- [ ] 待用户明确授权后，仅执行**至多一次**新的真实整批请求。
+- [ ] 若请求成功，完成真实人工复核、生成全部下游产物，运行
+  `python validate.py`，实际达到 `RESULTS_FINALISED`。
+- [ ] 真实端到端成功之前，不能宣称 Aizex 兼容问题已解决；失败后不得自动重试。
+
+**既有失败的根因尚未确认。** 离线检查发现，上次真实请求实际使用
+`json_object`，并非 `json_schema`；旧日志没有 HTTP 成功状态、响应正文或
+合法 `llm_response.json`。已知事实只有“completion 正文在第 1 行第 1 列
+未通过 JSON 解析”，不足以区分格式不受支持、纯文本、Markdown、空内容或
+响应结构差异。此次修改没有用新的付费请求进行初始诊断，也没有覆盖既有
+真实失败运行的证据。
+
+首选**兼容性候选**配置如下，尚未经过真实提供方验证：
+
+```dotenv
+OPENAI_API_MODE=responses
+OPENAI_RESPONSE_FORMAT=text
+OPENAI_TEMPERATURE_ZERO=false
+OPENAI_TIMEOUT_SECONDS=180
+```
+
+本地 `.env` 只更新上述四项；原有 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、
+`OPENAI_MODEL` 的值保持不变，凭据文件不提交。若提供方确实支持 Responses
+JSON mode，可在独立运行前选择 `OPENAI_RESPONSE_FORMAT=json_object`；支持
+严格 schema 时可选择 `json_schema`。不得在同一批请求失败后自动尝试其他
+格式或端点。没有设置 `OPENAI_API_MODE` 的旧配置仍默认使用
+`chat_completions`；`.env.example` 则明确提供新的 Responses 候选。
+
+下面的主分支暂停记录为历史检查点：其中 60 项测试和旧真实运行的状态
+属于上次合并，不代表本修复已执行真实调用。本修复当前停在付费验证授权前。
+
+## 历史检查点：主分支合并与暂停（2026-10-12）
 
 **运行状态：已暂停。** 已检查本项目的流水线及测试进程，没有仍在运行的
 进程。本次收尾只保存文档、提交及合并，不启动流水线、不新增 API 调用。
@@ -107,6 +163,8 @@ Use Python 3.10 or newer:
 ```sh
 git clone https://github.com/Hilbert-sun/deriv.git
 cd deriv
+# To review this unmerged API compatibility fix:
+git switch fix/aizex-api-compatibility
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
@@ -134,6 +192,7 @@ change the project inputs or require paid API calls.
 | `OPENAI_API_KEY` | Required real provider credential, or an explicit placeholder accepted by a local server |
 | `OPENAI_BASE_URL` | Optional HTTP(S) API base URL; blank uses the official OpenAI SDK default |
 | `OPENAI_MODEL` | Required model ID supported by your provider; no model is hardcoded |
+| `OPENAI_API_MODE` | `chat_completions` (legacy default) or `responses`; Aizex candidate explicitly selects `responses` |
 | `OPENAI_RESPONSE_FORMAT` | `json_schema` (default), `json_object`, or `text` |
 | `OPENAI_TEMPERATURE_ZERO` | Default `false`; enable only when the selected model supports `temperature=0` |
 | `OPENAI_TIMEOUT_SECONDS` | Finite positive SDK timeout; default `120` seconds |
@@ -142,14 +201,19 @@ Only the project-root `.env` is automatically loaded; existing environment
 variables take precedence. Other credential files such as `API.env` are ignored
 by Git and are not automatically sourced. Never commit credentials.
 
-The official OpenAI Python SDK uses Chat Completions for compatibility with
-third-party providers. Choose the response format before a run, according to the
-provider's capabilities: strict dynamic schema, JSON mode, or prompt-only JSON.
-`text` omits the `response_format` parameter but still requires strict JSON.
+The official OpenAI Python SDK supports both Chat Completions and Responses.
+`OPENAI_API_MODE` selects the API before the single batch request. Chat uses
+`messages` and `response_format`; Responses uses `input` and `text.format`. The
+formats are strict dynamic schema, JSON mode, or prompt-only JSON. `text` omits
+format parameters for maximum compatibility. Choose according to provider
+capabilities before a run; no Chat-specific arguments are sent to Responses.
 There is no automatic capability probing, endpoint switching, retry, or LLM
 repair request. SDK retries are disabled with `max_retries=0`. Temperature is
-omitted unless explicitly enabled. See the official [structured output guide](https://developers.openai.com/api/docs/guides/structured-outputs)
+omitted unless explicitly enabled. The SDK raw-response wrapper invokes the
+selected create method once and exposes the HTTP status; parsing the response
+makes no additional request. See the official [structured output guide](https://developers.openai.com/api/docs/guides/structured-outputs)
 and [Python SDK reference](https://developers.openai.com/api/reference/python).
+Responses parameters follow the official [Responses API reference](https://developers.openai.com/api/reference/python/resources/responses/methods/create).
 
 Every nonempty run sends all normalized tickets and the full configuration in
 one request, including a confidence request in that same prompt. Empty batches
@@ -175,7 +239,7 @@ before queue generation; validation must pass before finalisation.
 | `main.py` | Full workflow orchestration; importable `run_pipeline` supports isolated testing |
 | `io_utils.py` | Disk input validation and atomic UTF-8 artifact writes |
 | `normalizer.py` | Deterministic text normalization |
-| `llm_client.py` | Settings, prompt, dynamic schema, one SDK request, strict JSON parsing |
+| `llm_client.py` | Settings, API-specific arguments, dynamic schema, one SDK request, safe JSON/fence parsing and diagnostics |
 | `triage.py` | Prediction validation, configured routing, individual-record recovery |
 | `reviewer.py` | Interactive review and effective override validation |
 | `queue_generator.py` | Post-review final queue and deterministic Markdown counts |
@@ -229,9 +293,10 @@ the fallback ticket is included in human review. Unknown/unidentifiable model
 rows are logged; every actual input ticket is still accounted for. Without a
 configured fallback category, the run fails clearly.
 
-Total API failure, invalid top-level response shape, malformed JSON, Markdown
-fences, refusals, and interrupted responses stop the run without fabricating a
-successful prediction batch. A provider that ignores its requested JSON mode
+Total API failure, invalid top-level response shape, malformed JSON, incomplete
+fences, surrounding prose, refusals, and interrupted responses stop the run
+without fabricating a successful prediction batch. One complete JSON Markdown
+code fence is accepted only when its entire content is valid JSON. A provider that ignores its requested JSON mode
 may therefore require a configuration/model correction before a new run.
 
 ## Human review
@@ -270,6 +335,7 @@ validated predictions; changing a category does not regenerate a reply.
 | `pipeline_events.jsonl` | Current run's ordered stage/request events and input/output SHA-256 hashes |
 | `llm_prompt.json` | Actual canonical serialized messages supplied to the SDK, without credentials |
 | `llm_response.json` | Parsed runtime model response, used for offline validation/replay |
+| `llm_diagnostics.json` | Safe API/model/format/HTTP/completion/text-presence/failure metadata, without response text or secrets |
 
 JSON artifacts use UTF-8, `ensure_ascii=False`, readable indentation, and atomic
 replacement. Queue summaries use configured label order and sorted destinations;
@@ -283,7 +349,8 @@ Human corrections do not artificially raise the model's confidence.
 prediction coverage, routes, confidence, reply limits, effective overrides,
 final queue, summary counts, escalations, and all required workflow transitions.
 It also verifies the serialized full-batch prompt, recorded response and recovery,
-current-file hashes, and exactly one request in the current nonempty run. It can
+current-file hashes, API mode/prompt-parameter consistency, diagnostic evidence,
+and exactly one request in the current nonempty run. It can
 run independently and never contacts the model. Failures exit nonzero with a
 readable message. The same validator runs inside `main.py` before finalisation,
 without circular imports or relying on modification timestamps.
