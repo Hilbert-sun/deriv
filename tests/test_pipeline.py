@@ -262,7 +262,7 @@ def test_provider_format_modes(project, provider, settings, response_format):
 def test_malformed_entire_response_fails_without_repair(project, provider, settings, raw):
     provider.raw = raw
     workflow = Workflow()
-    with pytest.raises(LLMError):
+    with pytest.raises((LLMError, PredictionValidationError)):
         run(project, settings, workflow=workflow)
     assert len(provider.requests) == 1
     assert workflow.state == WorkflowState.TICKETS_NORMALIZED

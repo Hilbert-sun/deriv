@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from io_utils import save_text
+from io_utils import save_json, save_text
 from workflow import WorkflowState, WorkflowTransitionError
 
 
 OUTPUTS = (
     "normalized_tickets.json", "triage_predictions.json", "review_overrides.json",
-    "final_queue.json", "queue_summary.md", "escalations.json", "llm_prompt.json", "llm_response.json",
+    "final_queue.json", "queue_summary.md", "escalations.json", "llm_prompt.json", "llm_response.json", "llm_diagnostics.json",
 )
 
 
@@ -69,7 +69,8 @@ class CallAudit:
         self.record = None
 
     def prepare(self, request: dict, settings) -> None:
-        prompt = json.dumps(request["messages"], ensure_ascii=False, separators=(",", ":"))
+        prompt_parameter = "input" if settings.api_mode == "responses" else "messages"
+        prompt = json.dumps(request[prompt_parameter], ensure_ascii=False, separators=(",", ":"))
         save_text(self.run.root / "llm_prompt.json", prompt)
         self.record = {
             "stage": WorkflowState.TRIAGE_PREDICTED.value,
@@ -79,15 +80,22 @@ class CallAudit:
             "input_hashes": {name: sha256_file(self.run.root / name) for name in ("normalized_tickets.json", "triage_config.json")},
             "output_artifact": "triage_predictions.json", "run_id": self.run.run_id,
             "request_id": str(uuid4()), "response_format": settings.response_format,
+            "api_mode": settings.api_mode, "prompt_parameter": prompt_parameter,
         }
 
     def started(self) -> None:
         self.run.workflow.require_state(WorkflowState.TICKETS_NORMALIZED)
-        event = self.run.event("llm_request", request_id=self.record["request_id"], prompt_hash=self.record["prompt_hash"])
+        event = self.run.event("llm_request", request_id=self.record["request_id"], prompt_hash=self.record["prompt_hash"], api_mode=self.record["api_mode"])
         self.record["event_sequence"] = event["sequence"]
 
-    def finish(self, status: str, http_status=None, response_hash=None, error_type=None) -> None:
+    def finish(self, status: str, http_status=None, response_hash=None, error_type=None, diagnostics=None) -> None:
+        evidence = {}
+        if diagnostics is not None:
+            path = self.run.root / "llm_diagnostics.json"
+            save_json(path, diagnostics)
+            evidence = {"diagnostics": diagnostics, "diagnostics_hash": sha256_file(path)}
         append_jsonl(self.run.root / "llm_calls.jsonl", {
             **self.record, "status": status, "http_status": http_status,
             "response_hash": response_hash, "error_type": error_type,
+            **evidence,
         })
